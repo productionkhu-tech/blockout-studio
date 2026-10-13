@@ -1,0 +1,12 @@
+# 빌드 결과 · 캐시
+__pycache__/
+*.pyc
+_배포/
+*.tmp
+
+# 공개하지 않는 것(로컬 전용 자료 · 큰 모델 · 영상 작업 폴더)
+_내부/
+소개영상/
+assets/*
+!assets/.gitkeep
+scenes/승강로_v9.json

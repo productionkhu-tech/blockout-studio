@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>블록아웃 스튜디오</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect x='2' y='2' width='60' height='60' rx='14' fill='%2318181A'/><rect x='11' y='23' width='42' height='26' rx='5' fill='%23FF6820'/><rect x='23' y='15' width='18' height='10' rx='3' fill='%23FF6820'/><circle cx='34' cy='38' r='10' fill='%2318181A'/><circle cx='34' cy='38' r='6' fill='%23FF6820'/><circle cx='34' cy='38' r='2.5' fill='%2318181A'/></svg>">
+<link rel="stylesheet" href="app/ui.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/jsm/" } }
+</script>
+</head>
+<body>
+<header id="menubar">
+  <div class="brand"><span class="ic" data-ic="camera" data-size="18"></span><span>Blockout Studio</span></div>
+  <nav id="menus" aria-label="메뉴"></nav>
+  <button id="projName" class="projname" title="누르면 이름 바꾸기">제목 없음</button><span id="dirtyDot" title="저장하지 않은 변경 사항" hidden></span>
+  <button id="btnSave" class="savebtn" data-action="file.save" aria-label="프로젝트 저장"><span class="ic" data-ic="save" data-size="15"></span>저장</button>
+  <button id="btnOpen" class="iconbtn" data-action="file.open" aria-label="프로젝트 열기"><span class="ic" data-ic="open" data-size="16"></span></button>
+  <div class="right">
+    <div id="modeSwitch" class="modes" role="radiogroup" aria-label="작업 모드">
+      <button data-mode="manual" class="on" role="radio" aria-checked="true" title="수동 수정 — 직접 옮기고 찍기 (F2 로 바꾸기)"><span class="ic" data-ic="move" data-size="15"></span>수동 수정</button>
+      <button data-mode="agent" role="radio" aria-checked="false" title="에이전트 — 고칠 곳을 골라 메모 → AI 가 고침 (F2)"><span class="ic" data-ic="ai" data-size="15"></span>에이전트</button>
+    </div>
+    <button id="btnUndo" class="iconbtn" data-action="edit.undo" aria-label="되돌리기"><span class="ic" data-ic="undo"></span></button>
+    <button id="btnRedo" class="iconbtn" data-action="edit.redo" aria-label="다시 하기"><span class="ic" data-ic="redo"></span></button>
+    <button id="btnAI" class="ghost" data-action="ai.connect"><span class="ic" data-ic="ai"></span>AI 연결<span id="aiDot"></span></button>
+  </div>
+</header>
+
+<main>
+  <div id="viewport">
+    <canvas id="c" tabindex="0" aria-label="3D 화면"></canvas>
+    <svg id="guides" aria-hidden="true"></svg>
+    <div id="hud"></div>
+    <div id="navBar"><button id="navPrev" title="이전 장면 (←)"><span class="ic" data-ic="prev"></span>이전</button><span id="navLabel">장면 없음</span><button id="navNext" title="다음 장면 (→)">다음<span class="ic" data-ic="next"></span></button></div>
+    <div id="recBadge"><span class="ic" data-ic="record"></span>녹화 중 <span id="recT">0.0</span> s — <kbd>V</kbd> 로 끝</div>
+    <div id="playBadge"><span class="ic" data-ic="play"></span>재생 중 — <kbd>Space</kbd> 일시정지</div>
+    <div id="editBadge"></div>
+    <div id="agentBanner"><span class="ic" data-ic="ai" data-size="16"></span><b>에이전트 모드</b><span>고칠 곳을 눌러 고르고 메모 — 물체 · 배경 · 카드 · 타임라인 구간</span><button id="bannerPath" data-action="tool.path"><span class="ic" data-ic="path" data-size="14"></span>동선 그리기 <kbd>P</kbd></button><button id="agentAI" class="aichip">AI 확인 중</button></div>
+    <div id="viewMode" class="seg" role="group" aria-label="보기"><button data-v="" class="on" title="원근 3D (Tab)">3D</button><button data-v="top" title="위에서 본 평면도">위 평면</button><button data-v="front" title="앞에서 본 정면도">앞</button><button data-v="side" title="옆에서 본 측면도">옆</button></div>
+    <div id="toast" aria-live="polite"></div>
+    <div id="aiBadge" aria-live="polite"></div>
+    <div id="pickTip" hidden></div>
+    <div id="hint"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 이동 <kbd>R</kbd><kbd>F</kbd> 위아래 <span class="adv"><kbd>Q</kbd><kbd>E</kbd> 고개 </span>· <b>드래그</b> 둘러보기<span class="adv"> · <kbd>Shift</kbd> 빠르게 <kbd>[</kbd><kbd>]</kbd> 속도 · <b>휠</b> 렌즈</span> &nbsp;|&nbsp; <kbd>C</kbd> 찍기 <kbd>K</kbd> 물체 키 <kbd>Space</kbd> 재생 <span class="adv"><kbd>Home</kbd> 처음으로 · <kbd>Tab</kbd> 평면도 · </span><kbd>?</kbd> 단축키</div>
+    <div id="coach" role="status"><div class="k"></div><div class="t"></div><div class="s"><button id="coachSkip">건너뛰기</button></div></div>
+  </div>
+
+  <aside id="panel">
+    <div id="tabs" role="tablist" aria-label="패널">
+      <button role="tab" data-tab="camera" class="on"><span class="ic" data-ic="camera" data-size="16"></span>카메라</button>
+      <button role="tab" data-tab="objects"><span class="ic" data-ic="box" data-size="16"></span>물체</button>
+      <button role="tab" data-tab="set"><span class="ic" data-ic="grid" data-size="16"></span>세트</button>
+      <button role="tab" data-tab="notes"><span class="ic" data-ic="note" data-size="16"></span>메모<span id="tabNotesN" class="badge"></span></button>
+      <button role="tab" data-tab="export"><span class="ic" data-ic="film" data-size="16"></span>내보내기</button>
+    </div>
+
+    <section class="tab" data-tab="camera">
+      <button id="btnShot" class="big" data-action="shot.take"><span class="ic" data-ic="camera" data-size="22"></span>여기 찍기 <span class="key"></span></button>
+      <p class="hint">WASD 로 날며 마우스로 둘러보고, 마음에 드는 자리에서 <b>여기 찍기</b>. 찍은 순서대로 이어집니다.</p>
+      <div class="stprow"><span>장면 사이</span><div class="stp" id="gapStp"><button data-d="-1" aria-label="줄이기">−</button><span class="v">1.5 초</span><button data-d="1" aria-label="늘리기">+</button></div></div>
+      <button id="btnRec" class="big rec" data-action="shot.record"><span class="ic" data-ic="record" data-size="20"></span>녹화 — 날아다닌 그대로 <span class="key"></span></button>
+      <div class="lbl">렌즈 <small id="lensVal">25 mm</small></div>
+      <div class="seg" id="lensBtns"><button data-v="18">18</button><button data-v="24">24</button><button data-v="35">35</button><button data-v="50">50</button><button data-v="85">85</button><button data-d="-1" title="렌즈 넓게 (−)" aria-label="렌즈 넓게"><span class="ic" data-ic="minus" data-size="14"></span></button><button data-d="1" title="렌즈 좁게 (=)" aria-label="렌즈 좁게"><span class="ic" data-ic="plus" data-size="14"></span></button></div>
+      <div class="lbl">이동 속도 <small id="speedVal">2.0 m/s</small></div>
+      <div class="seg" id="speedBtns"><button data-v="1">걷기</button><button data-v="2" class="on">보통</button><button data-v="5">빠름</button><button data-v="15">아주 빠름</button><button data-d="-1" title="속도 줄이기 ([)" aria-label="속도 줄이기"><span class="ic" data-ic="minus" data-size="14"></span></button><button data-d="1" title="속도 늘리기 (])" aria-label="속도 늘리기"><span class="ic" data-ic="plus" data-size="14"></span></button></div>
+      <div class="lbl" id="spotsLbl">바로 가기</div>
+      <div class="seg" id="spots"></div>
+      <details class="adv"><summary>무빙 넣기 <small>지금 자리에서 시작 · 처음과 끝은 부드럽게</small></summary>
+        <div class="seg" id="moveBtns"><button data-m="dollyIn">밀어 들어가기</button><button data-m="dollyOut">빠져나오기</button><button data-m="craneUp">크레인 업</button><button data-m="craneDown">크레인 다운</button><button data-m="trackL">왼쪽 트래킹</button><button data-m="trackR">오른쪽 트래킹</button><button data-m="arcL">왼쪽으로 돌기</button><button data-m="arcR">오른쪽으로 돌기</button><button data-m="tiltUp">틸트 업</button><button data-m="tiltDown">틸트 다운</button><button data-m="dollyZoom" title="밀고 들어가며 렌즈는 넓게 — 피사체 크기는 그대로, 배경이 늘어남(현기증 효과)">돌리 줌</button></div>
+        <div class="grid2"><div class="stprow"><span>길이</span><div class="stp" id="moveDurStp"><button data-d="-1">−</button><span class="v">4 초</span><button data-d="1">+</button></div></div><div class="stprow"><span>거리</span><div class="stp" id="moveDistStp"><button data-d="-1">−</button><span class="v">2 m</span><button data-d="1">+</button></div></div></div>
+      </details>
+      <details class="adv"><summary>기울기 · 보기</summary>
+        <div class="lbl">기울기 <small id="rollVal">0°</small></div>
+        <div class="seg" id="rollBtns"><button data-d="-1">왼쪽 <small>Z</small></button><button data-v="0">바로</button><button data-d="1">오른쪽 <small>X</small></button></div>
+        <div class="lbl">보기 <small>(고른 물체 또는 가운데 둘레)</small></div>
+        <div class="seg" id="viewBtns"><button data-view="front">앞 <small>1</small></button><button data-view="right">옆 <small>3</small></button><button data-view="top">위 <small>7</small></button><button data-view="focus"><span class="ic" data-ic="focus" data-size="14"></span>물체로 <small>Shift+F</small></button></div>
+        <label class="tog"><input type="checkbox" id="walkMode"> 걷기 모드 <small>(` 키 · 눈높이로 걷기)</small></label>
+        <p class="hint">마우스 감도·세로 반전·고개 회전 속도는 설정 › 조작.</p>
+      </details>
+    </section>
+
+    <section class="tab" data-tab="objects" hidden>
+      <div class="lbl">넣기</div>
+      <div class="seg" id="addBtns"><button data-k="box"><span class="ic" data-ic="box" data-size="15"></span>상자</button><button data-k="cyl"><span class="ic" data-ic="cylinder" data-size="15"></span>원기둥</button><button data-k="sphere"><span class="ic" data-ic="sphere" data-size="15"></span>공</button><button data-k="plane"><span class="ic" data-ic="plane" data-size="15"></span>판</button><button data-k="person"><span class="ic" data-ic="person" data-size="15"></span>사람</button></div>
+      <div class="seg" id="propBtns"><button data-k="wall">벽</button><button data-k="door">문</button><button data-k="table">테이블</button><button data-k="chair">의자</button><button data-k="car">차</button><button data-k="tree">나무</button><button data-k="stairs">계단</button></div>
+      <div class="seg" id="builtinModels"></div>
+      <div class="seg"><button id="btnModelFile"><span class="ic" data-ic="open" data-size="15"></span>내 GLB 파일 열기…</button></div>
+      <input type="file" id="fileModel" accept=".glb,.gltf" hidden>
+      <div id="objPanel" style="display:none">
+        <div class="objhead"><input id="objName" aria-label="물체 이름"><button id="objDup" class="iconbtn" title="복제 (Shift+D)" aria-label="복제"><span class="ic" data-ic="copy" data-size="15"></span></button><button id="objDel" class="iconbtn danger" title="지우기 (Delete)" aria-label="지우기"><span class="ic" data-ic="trash" data-size="15"></span></button></div>
+        <div class="seg" id="gizmoMode"><button data-m="translate" class="on"><span class="ic" data-ic="move" data-size="14"></span>이동 <small>1</small></button><button data-m="rotate"><span class="ic" data-ic="rotate" data-size="14"></span>회전 <small>2</small></button><button data-m="scale"><span class="ic" data-ic="scale" data-size="14"></span>크기 <small>3</small></button></div>
+        <div class="grid2 adv">
+          <div class="stprow"><span>x</span><div class="stp" data-f="px"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>y</span><div class="stp" data-f="py"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>z</span><div class="stp" data-f="pz"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>회전</span><div class="stp" data-f="ry"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>가로 (m)</span><div class="stp" data-f="sx"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>높이 (m)</span><div class="stp" data-f="sy"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+          <div class="stprow"><span>세로 (m)</span><div class="stp" data-f="sz"><button data-d="-1">−</button><span class="v"></span><button data-d="1">+</button></div></div>
+        </div>
+        <div class="lbl">크기 <small>(한 번에 · 상자 1 m 기준)</small></div>
+        <div class="seg" id="objSizeBtns"><button data-s="0.3">×0.3</button><button data-s="0.5">×0.5</button><button data-s="1">×1</button><button data-s="2">×2</button></div>
+        <div class="lbl">움직임 키 <small id="objKeyN">없음</small></div>
+        <div class="seg"><button id="objKeyAdd" class="primary">이 자리를 키로 <small>K</small></button><button id="objKeyDel">이 시각 키 지우기</button><button id="objKeyClear">키 전부 지우기</button></div>
+        <p class="hint">타임라인에서 시간을 옮겨 놓고 물체를 옮긴 뒤 <b>K</b> — 키가 두 개 넘으면 그 사이를 움직입니다. 바닥에 길을 그려 걷게 하려면 <b>동선 그리기 P</b>.</p>
+        <label class="tog"><input type="checkbox" id="objSubject"> 피사체 <small>(카메라가 따라갈 주인공 — AI 도 봄)</small></label>
+        <label class="tog"><input type="checkbox" id="objVis" checked> 보이기</label>
+        <label class="tog adv"><input type="checkbox" id="objLock"> 잠금 <small>(클릭·화살표로 안 움직임)</small></label>
+        <label class="tog hoistOnly"><input type="checkbox" id="objFollow"> <span style="white-space:nowrap">카를 타고</span> <small>(카와 함께 오르내림)</small></label>
+        <div id="objAnimRow" style="display:none"><label class="tog"><input type="checkbox" id="objSync" checked> 모델 애니메이션을 재생 시간에 맞춤</label><input type="range" id="objAnimT" min="0" max="1" step="0.01" value="0" aria-label="애니메이션 시각"></div>
+      </div>
+      <div class="lbl">이 장면의 물체 <small>누르면 고르기</small></div>
+      <div id="objList"></div>
+    </section>
+
+    <section class="tab" data-tab="set" hidden>
+      <div class="setcard"><div><small>지금 세트</small><b id="setName">—</b></div><button id="btnNewProj" data-action="file.new">다른 세트로 새로…</button></div>
+      <div class="hoistOnly">
+        <label class="tog"><input type="checkbox" id="follow" checked> 엘리베이터를 타고 찍기 <small>(찍은 자리가 카와 함께 오르내림)</small></label>
+        <div class="lbl">카 움직임</div>
+        <div class="seg" id="carMove"><button data-v="stop">멈춤</button><button data-v="slow">천천히</button><button data-v="normal" class="on">보통</button><button data-v="fast">빠르게</button></div>
+        <div class="lbl adv">문</div>
+        <div class="seg adv" id="doorBtns"><button data-v="0" class="on">닫힘</button><button data-v="0.5">반쯤</button><button data-v="1">열림</button></div>
+        <div class="lbl adv">벽 숨기기 <small>(밖에서 들여다볼 때)</small></div>
+        <div class="seg adv" id="cutBtns"><button data-v="none" class="on">안 숨김</button><button data-v="front">앞</button><button data-v="left">왼쪽</button><button data-v="right">오른쪽</button><button data-v="back">뒤</button></div>
+      </div>
+      <div class="lbl">빛 · 분위기</div>
+      <div class="rows" id="rowsScene"></div>
+      <details class="adv hoistOnly"><summary>조명 기구 <small>— 색은 영상 단계에서</small></summary>
+        <label class="tog"><input type="checkbox" id="lCove" checked> 층마다 코브 선반 속 LED(양옆 벽)</label>
+        <label class="tog"><input type="checkbox" id="lLeak" checked> 승강장 문틈으로 새는 로비 빛</label>
+        <label class="tog"><input type="checkbox" id="lCarLamp" checked> 카 지붕 작업등</label>
+        <label class="tog"><input type="checkbox" id="lTop" checked> 승강로 꼭대기 빛</label>
+        <div class="rows" id="rowsLight"></div>
+      </details>
+    </section>
+
+    <section class="tab" data-tab="notes" hidden>
+      <div class="selbox">
+        <div class="selrow"><span class="lbl0">고른 것</span><span id="selChip" class="chip empty">고른 것 없음</span><button id="selClear" class="link" hidden>풀기</button></div>
+        <div class="seg"><button id="selSubject" hidden>피사체로 지정</button><button id="selRange" title="타임라인 위쪽 눈금을 끌어 잡은 구간">지금 구간 고르기</button><button id="pathBtn" data-action="tool.path"><span class="ic" data-ic="path" data-size="14"></span>동선 그리기 <small>P</small></button></div>
+        <textarea id="noteText" rows="3" placeholder="무엇을 고칠까요? 예: 이 벽을 두 배로 높게 · 이 구간 카메라를 더 천천히 · 이 사람이 이 길로 뛰어오게"></textarea>
+        <div class="noterow"><small>화면 · 카드 · 타임라인을 눌러 대상 고르기</small><button id="noteAdd" class="primary">메모 남기기 <small>Ctrl+Enter</small></button></div>
+      </div>
+      <div class="notehead"><b>수정 메모</b><small id="noteCount"></small><div class="seg mini" id="noteFilter"><button data-f="open" class="on">열림</button><button data-f="done">완료</button><button data-f="all">전체</button></div></div>
+      <button id="noteAI" class="ai" data-action="ai.copyPrompt"><span class="ic" data-ic="ai" data-size="16"></span>AI 에게 맡기기 <small>— 맡기는 말을 복사해 AI 채팅에 붙여 넣기</small></button>
+      <ol id="noteList"></ol>
+    </section>
+
+    <section class="tab" data-tab="export" hidden>
+      <div class="btns col">
+        <button id="exMp4" class="primary"><span class="ic" data-ic="film"></span>MP4 저장 <small id="exRangeNote">무빙 전체</small></button>
+        <button id="exPng"><span class="ic" data-ic="image"></span>PNG 저장 (지금 화면)</button>
+        <button id="exGlb" title="세트·물체·카메라 무빙을 .glb 로 — 블렌더에서 파일 › 가져오기 › glTF 2.0"><span class="ic" data-ic="model"></span>블렌더로 보내기 (.glb)</button>
+        <button id="exSheet" class="adv"><span class="ic" data-ic="grid"></span>장면 시트 PNG</button>
+        <button id="exPlan" class="adv" title="지금 보기(평면·정면·측면, 3D 면 평면도)를 카메라 자리·범위·동선과 함께 그림으로"><span class="ic" data-ic="grid"></span>도면 PNG</button>
+        <button id="exShots" class="adv" title="장면마다 시작·길이·렌즈·높이·자리·방향·메모 — 인쇄용 HTML(썸네일·도면 포함)과 CSV"><span class="ic" data-ic="save"></span>샷 리스트 (HTML·CSV)</button>
+      </div>
+      <div class="lbl">화면비</div>
+      <div class="seg" id="aspectBtns"><button data-v="16:9" class="on">16:9</button><button data-v="9:16">9:16</button><button data-v="21:9">21:9</button><button data-v="4:3">4:3</button><button data-v="1:1">1:1</button></div>
+      <div class="lbl">해상도</div>
+      <div class="seg" id="resBtns"><button data-v="720">720</button><button data-v="1080" class="on">1080</button><button data-v="2160">4K</button></div>
+      <details class="adv"><summary>미리보기 · 길이</summary>
+        <div class="lbl">미리보기</div>
+        <div class="seg" id="lookBtns"><button data-v="outline">윤곽선 <small>O</small></button><button data-v="xray">엑스레이 <small>Alt+Z</small></button></div>
+        <div class="lbl">구도 가이드 <small>(화면에만)</small></div>
+        <div class="seg" id="guideBtns"><button data-v="none" class="on">없음</button><button data-v="thirds">삼분할</button><button data-v="center">중심</button><button data-v="diag">대각선</button><button data-v="golden">황금비</button></div>
+        <label class="tog"><input type="checkbox" id="letterbox"> 2.39:1 레터박스 미리보기</label>
+        <div class="stprow"><span>전체 길이 <small>(장면 시각을 비례로)</small></span><div class="stp" id="totalStp"><button data-d="-1">−</button><span class="v">0 초</span><button data-d="1">+</button></div></div>
+        <div class="stprow"><span>마지막에 머무는 시간</span><div class="stp" id="tailStp"><button data-d="-1">−</button><span class="v">0.5 초</span><button data-d="1">+</button></div></div>
+        <div class="row"><label for="tFps">초당 프레임</label><select id="tFps"><option>24</option><option>25</option><option>30</option><option>60</option></select></div>
+        <div class="row"><label for="exSheetN">장면 시트 장수</label><input type="number" id="exSheetN" value="8" min="2" max="24"></div>
+      </details>
+      <p class="hint">파일은 다운로드 폴더에 저장됩니다. 프로젝트 자체는 파일 › 저장(Ctrl+S).</p>
+    </section>
+  </aside>
+</main>
+
+<footer id="bottom">
+  <div id="transport">
+    <div class="tgroup">
+      <button id="tStart" class="iconbtn" data-action="time.start" aria-label="처음으로"><span class="ic" data-ic="start" data-size="16"></span></button>
+      <button id="btnPlay" class="play" data-action="play.toggle"><span class="ic" data-ic="play" data-size="16"></span>재생</button>
+      <button id="tEnd" class="iconbtn flip" data-action="time.end" aria-label="끝으로"><span class="ic" data-ic="start" data-size="16"></span></button>
+      <button id="btnPlayStart" class="ghost" data-action="play.fromStart">처음부터</button>
+      <span id="tTime">0.00 / 0.0 s</span>
+    </div>
+    <div class="tgroup">
+      <span class="tl0" title="타임라인 위쪽 눈금을 끌어도 구간이 잡힙니다 — 재생 · MP4 가 이 구간만">구간</span>
+      <button id="rIn" data-action="range.in">인</button><button id="rOut" data-action="range.out">아웃</button><button id="rClear" class="ghost" data-action="range.clear">지우기</button>
+      <span id="rText" class="dim"></span>
+    </div>
+    <div class="tgroup">
+      <button id="snapBtn" class="toggle" data-action="time.snap" aria-pressed="false"><span class="ic" data-ic="magnet" data-size="15"></span>자석</button>
+      <button id="loopBtn" class="toggle" data-action="play.loop" aria-pressed="false"><span class="ic" data-ic="loop" data-size="15"></span>반복</button>
+    </div>
+    <span id="stripInfo" class="dim"></span>
+  </div>
+  <div id="strip"></div>
+  <div id="tlWrap"><canvas id="tl" height="38" aria-label="타임라인 — 위쪽 눈금을 끌면 구간, 마름모를 끌면 키 시각"></canvas></div>
+</footer>
+
+<div id="statusbar">
+  <span id="status" role="status" aria-live="polite"></span>
+  <span class="spacer"></span>
+  <span id="updStatus" class="sr" role="status" aria-atomic="true"></span>
+  <button id="btnEasy" class="ghost small" data-action="view.easy">쉬운 모드</button>
+  <button id="btnUpdate" class="ver" title="업데이트 확인"><span id="verLabel">v—</span><span class="dot"></span><span id="updLabel">업데이트 확인</span></button>
+</div>
+
+<input type="file" id="fileScene" accept=".json" hidden>
+<div id="overlay"><div class="box"><div id="ovText">내보내는 중…</div><div id="ovTrack"><div id="ovBar"></div></div><div class="ovfoot"><span id="ovPct">0%</span><button id="ovStop">중단</button></div></div></div>
+
+<div id="projModal" class="modal" role="dialog" aria-labelledby="projTitle"><div class="box wide">
+  <div class="mhead"><h3 id="projTitle">프로젝트 열기</h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <div class="mtools"><input id="projSearch" type="search" placeholder="이름으로 찾기"><button id="projShowFolder" class="ghost"><span class="ic" data-ic="open" data-size="15"></span>폴더 열기</button></div>
+  <div id="projGrid" class="pgrid"></div>
+  <p class="path"><span id="projFolder"></span></p>
+  <div class="btns"><button id="projImport">다른 곳의 파일 가져오기…</button><button data-close>취소</button><button id="projOpen" class="primary">열기</button></div>
+</div></div>
+
+<div id="newModal" class="modal" role="dialog" aria-labelledby="newTitle"><div class="box wide">
+  <div class="mhead"><h3 id="newTitle">새 프로젝트 — 세트 고르기</h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <div id="newGrid" class="pgrid tpl"></div>
+</div></div>
+
+<div id="recoverModal" class="modal" role="dialog" aria-labelledby="recTitle"><div class="box">
+  <div class="mhead"><h3 id="recTitle">자동 저장에서 되살리기</h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <p class="lead">바뀐 것이 있을 때 2분마다 저장해 둔 최근 10개입니다. 고르면 그 상태로 열립니다(저장하려면 Ctrl+S).</p>
+  <ul id="recoverList" class="rlist"></ul>
+</div></div>
+
+<div id="prefsModal" class="modal" role="dialog" aria-labelledby="prefsTitle"><div class="box prefs">
+  <div class="mhead"><h3 id="prefsTitle">환경 설정</h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <div class="prefswrap"><nav id="prefsTabs" role="tablist" aria-label="설정"></nav><div id="prefsBody"></div></div>
+</div></div>
+
+<div id="help" class="modal" role="dialog" aria-labelledby="helpTitle"><div class="box wide">
+  <div class="mhead"><h3 id="helpTitle">세 단계면 됩니다</h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <div class="steps3">
+    <div><div class="n">1</div><b>날아다니기</b><p><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> 움직이기 · <kbd>Q</kbd><kbd>E</kbd> 고개 좌우 · <kbd>R</kbd> 위 <kbd>F</kbd> 아래. 화면을 <b>마우스로 끌어</b> 둘러봅니다. 휠은 렌즈.</p></div>
+    <div><div class="n">2</div><b>여기 찍기</b><p>마음에 드는 자리에서 <kbd>C</kbd>. 서너 번 찍으면 찍은 순서대로 카메라가 이어집니다. 아래 카드를 누르면 그 장면을 고칠 수 있습니다.</p></div>
+    <div><div class="n">3</div><b>재생 · 저장</b><p><kbd>Space</kbd> 재생, <kbd>Home</kbd> 처음으로. 프로젝트는 <kbd>Ctrl</kbd>+<kbd>S</kbd>, 영상은 <b>내보내기</b> 탭의 MP4.</p></div>
+  </div>
+  <h4>두 가지 모드</h4>
+  <p class="lead"><b>수동 수정</b>: 직접 옮기고 찍습니다. <b>에이전트</b>: 고칠 곳(물체·배경·피사체·시간 구간·동선·카메라 장면)을 눌러 고르고 <b>메모</b>를 남깁니다. AI 에게 「메모대로 고쳐 줘」 하면 AI 가 메모를 읽고 고친 뒤 완료로 표시합니다. 바꾸기는 위쪽 버튼이나 <kbd>F2</kbd>.</p>
+  <h4>AI 로 만들기</h4>
+  <p class="lead">위쪽 「AI 연결」에서 Claude · ChatGPT(Codex) 에 한 번 연결하면, 「성 하나 지어 줘」 처럼 말로 시킨 것이 이 창에 바로 만들어집니다. AI 가 한 일은 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 로 되돌립니다.</p>
+  <p class="dim">처음엔 <b>쉬운 모드</b>(꼭 필요한 것만 보임)입니다. 오른쪽 아래 「쉬운 모드」를 누르면 무빙 넣기·도면·샷 리스트 같은 전체 기능이 나옵니다. 색은 넣지 않습니다(회색 블록아웃). 전체 단축키는 <kbd>?</kbd>, 바꾸기는 설정 › 단축키.</p>
+  <div class="btns"><button id="helpCoach">따라 하기 안내 다시 보기</button><button id="helpClose" class="primary" data-close>시작하기</button></div>
+</div></div>
+
+<div id="aiModal" class="modal" role="dialog" aria-labelledby="aiTitle"><div class="box wide">
+  <div class="mhead"><h3 id="aiTitle">AI 연결 <small>— Claude · ChatGPT 가 이 창을 말로 만들고 고칩니다</small></h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <p id="aiNow" class="ainow" role="status">확인 중…</p>
+  <ol class="aisteps">
+    <li><b>쓰는 AI 앱의 「연결」을 한 번 누르기</b>
+      <div class="aiCards">
+        <div class="aiCard" id="aiClaude"><b>Claude 데스크톱</b><p>확인 중…</p><button data-client="claude" class="primary">연결</button></div>
+        <div class="aiCard" id="aiCodex"><b>ChatGPT 데스크톱 · Codex</b><p>확인 중…</p><button data-client="codex" class="primary">연결</button></div>
+      </div></li>
+    <li><b>그 AI 앱을 완전히 껐다 켜기</b><span>창만 닫지 말고, 작업 표시줄 오른쪽 아이콘에서 「종료」한 뒤 다시 실행</span></li>
+    <li><b>AI 에게 말하기</b><span>「블록아웃 스튜디오에 의자 하나 놓아 줘」 → 이 창에 바로 생기면 성공. 이 앱이 꺼져 있어도 AI 가 부르면 켜집니다.</span></li>
+  </ol>
+  <p id="aiMsg" role="status"></p>
+  <details class="aiMore"><summary>안 될 때</summary>
+    <ul class="alist">
+      <li>AI 앱의 도구(커넥터) 목록에 <b>blockout-studio</b> 가 없으면 → 2번을 다시(트레이에서 완전히 종료)</li>
+      <li>카드에 「다시 연결」이 보이면 → 이 앱(exe)을 다른 폴더로 옮긴 것. 눌러서 새 자리로 연결</li>
+      <li>ChatGPT 웹사이트(chatgpt.com)는 이 PC 의 앱에 못 붙습니다 → ChatGPT 데스크톱의 Codex 를 쓰세요</li>
+      <li>회사 보안 프로그램이 막으면 → IT 담당자에게 「이 PC 안의 127.0.0.1 연결 허용」 요청</li>
+      <li>AI 는 있어도 연결이 필요 없는 일(직접 만들기 · 저장 · 내보내기)은 AI 없이 다 됩니다</li>
+    </ul>
+  </details>
+  <details class="aiMore"><summary>다른 AI 앱 — Claude Code · Codex CLI · Cursor · VS Code · 주소</summary>
+    <div id="aiSnips" class="snips"></div>
+  </details>
+  <div class="aiTry"><b>이렇게 말해 보세요</b>
+    <ul>
+      <li>「빈 스튜디오에 성을 하나 쌓고, 카메라가 성 둘레를 한 바퀴 돌게 해 줘」</li>
+      <li>「서부 마을 큰길에서 두 사람이 마주 걸어오게 하고, 낮은 앵글로 천천히 밀고 들어가 줘」</li>
+      <li>「내가 남긴 수정 메모대로 고쳐 줘」 <small>(에이전트 모드에서 메모를 남긴 뒤)</small></li>
+      <li>「노을 지는 느낌으로 바꾸고 MP4 로 저장해 줘」</li>
+    </ul>
+  </div>
+  <p class="dim">AI 가 저장한 영상·그림은 <span id="aiOut"></span> 에 모입니다. AI 가 한 일은 <kbd>Ctrl</kbd>+<kbd>Z</kbd> 로 하나씩 되돌립니다.</p>
+  <h4>AI 가 한 일</h4>
+  <ol id="aiLog"></ol>
+  <div class="btns"><button id="aiClose" class="primary" data-close>닫기</button></div>
+</div></div>
+
+<div id="keysModal" class="modal" role="dialog" aria-labelledby="keysTitle"><div class="box wide">
+  <div class="mhead"><h3 id="keysTitle">단축키 <small>— 바꾸려면 설정 › 단축키</small></h3><button class="iconbtn" data-close aria-label="닫기"><span class="ic" data-ic="close"></span></button></div>
+  <div id="keysBody" class="keygrid"></div>
+  <p class="dim">마우스: 끌기 = 둘러보기 · 휠 = 렌즈 · Shift+휠 = 렌즈를 바꿔도 피사체 크기 유지 · 더블클릭 = 그 자리로 · 타임라인 위쪽 눈금 끌기 = 구간 · 마름모 끌기 = 키 시각.</p>
+  <div class="btns"><button id="keysEdit">단축키 바꾸기…</button><button id="keysClose" class="primary" data-close>닫기</button></div>
+</div></div>
+
+<script type="module" src="app/studio.js"></script>
+</body>
+</html>
