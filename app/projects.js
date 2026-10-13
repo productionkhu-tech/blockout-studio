@@ -172,14 +172,14 @@ export class Projects {
   }
 
   // ---- 세션(지금 작업) — 브라우저 저장소가 비어도(포트·브라우저가 바뀜) 이어서 열리게 앱 서버에도 둔다
-  saveSession() {
+  saveSession() { clearTimeout(this.sessT); this.sessT = setTimeout(() => this.flushSession(), 1500); }
+
+  async flushSession() {                                         // 바로 씀(업데이트로 다시 켜기 직전 등)
     clearTimeout(this.sessT);
-    this.sessT = setTimeout(async () => {
-      if (!(await this.hasServer())) return;
-      const a = this.app;
-      const body = JSON.stringify({ savedAt: Date.now(), state: a.state, project: { name: this.name, file: this.file, dirty: this.dirty }, prefs: a.prefs, recent: this.recent() });
-      fetch('/api/session', { method: 'POST', body }).catch(() => {});
-    }, 1500);
+    if (!(await this.hasServer())) return;
+    const a = this.app;
+    const body = JSON.stringify({ savedAt: Date.now(), state: a.state, project: { name: this.name, file: this.file, dirty: this.dirty }, prefs: a.prefs, recent: this.recent() });
+    await fetch('/api/session', { method: 'POST', body }).catch(() => {});
   }
 
   async loadSession() {

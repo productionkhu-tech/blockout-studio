@@ -140,8 +140,12 @@ def app_argv():
     return [sys.executable, os.path.abspath(__file__)]
 
 
+RESTART = []                                        # 「지금 다시 시작」: 서버를 내린 뒤 main 이 띄울 새 exe 명령
+
+
 def restart_updated(port):
-    """「지금 다시 시작」 — 받아 둔 새 exe 로 바꿔 끼우고, 앱 창과 서버를 닫은 뒤 새 exe 를 띄운다."""
+    """「지금 다시 시작」 — 받아 둔 새 exe 로 바꿔 끼우고, 앱 창과 서버를 닫는다. 새 exe 는 main 이 포트를 비운 뒤 띄운다
+    (여기서 띄우면 안 됨: 요청 처리 스레드가 만든 데몬 타이머에서 돌아, 서버가 내려가 프로세스가 끝나면 같이 죽음 — 10/13 업데이트 시험에서 다시 안 켜졌던 것)."""
     exe = sys.executable
     if not server_api.apply_pending(exe, VERSION):
         return
@@ -150,10 +154,8 @@ def restart_updated(port):
             PROC.terminate()
     except Exception:
         pass
+    RESTART.append([exe] + sys.argv[1:])            # 켤 때 준 옵션(--port · --no-open)은 그대로
     HTTPD.shutdown()
-    HTTPD.server_close()                            # 포트를 비워야 새 exe 가 같은 주소로 뜸
-    mcp_bridge.clear_lock(port)
-    mcp_bridge.launch_detached([exe] + sys.argv[1:])           # 켤 때 준 옵션(--port · --no-open)은 그대로
 
 
 def main():
@@ -197,7 +199,9 @@ def main():
         pass
     finally:
         mcp_bridge.clear_lock(port)
-    httpd.server_close()
+    httpd.server_close()                            # 포트를 비워야 새 exe 가 같은 주소로 뜸
+    if RESTART:
+        mcp_bridge.launch_detached(RESTART[0])
 
 
 if __name__ == "__main__":

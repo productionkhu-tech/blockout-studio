@@ -86,7 +86,14 @@ export class Updates {
       if (this.app.projects.dirty && !(await this.app.projects.save())) return;
       this.app.projects.dirty = false;
       this.app.status('새 판으로 다시 시작하는 중…'); this.app.toast('다시 시작합니다…');
+      this.app.saveLocal(); await this.app.projects.flushSession();     // 세션도 지금 상태로(새 판이 이어서 엶)
       await fetch('/api/update/apply', { method: 'POST' }).catch(() => {});
+      clearInterval(this.timer);
+      const from = s.current;                                          // 이 창이 안 닫히고 남으면(브라우저가 다른 창에 넘긴 경우) 새 판 서버가 뜨는 대로 새로 고침
+      for (let i = 0; i < 40; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        try { const v = await (await fetch('/api/version', { cache: 'no-store' })).json(); if (v.version && v.version !== from) { location.reload(); return; } } catch (e) { /* 아직 다시 켜는 중 */ }
+      }
       return;
     }
     this.app.toast(this.text(s));
