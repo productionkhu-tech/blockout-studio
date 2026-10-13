@@ -203,7 +203,8 @@ class App {
       this.projects.setClean(this.state.name, null);
       if (this.prefs.resume === false) setTimeout(() => this.projects.newDialog(this.templates()), 300);   // 이어서 열기를 끈 사람: 켤 때마다 세트 고르기
     }
-    if (!localStorage.getItem(LS_TUT)) this.coachStart();
+    let tut = false; try { tut = !!localStorage.getItem(LS_TUT); } catch (e) { /* 저장소 막힘 */ }
+    if (!tut && !this.prefs.tutorialDone) this.coachStart();
   }
 
   async loadVersion() {            // 버전 — 오른쪽 아래 「v1.5.0 · 업데이트 확인」, 정보 창, AI 설명서
@@ -264,8 +265,10 @@ class App {
     if (done) { c.step++; if (c.step === 4) c.doneAt = performance.now(); this.coachShow(); this.toast(c.step === 4 ? '끝! 잘하셨어요' : '좋아요'); }
   }
 
-  coachEnd() {
-    this.coach = null; $('coach').style.display = 'none'; localStorage.setItem(LS_TUT, '1');
+  coachEnd() {                     // 끝 — 설정에도 남김(브라우저 저장소가 비어도 서버 세션의 설정으로 다시 안 뜨게)
+    this.coach = null; $('coach').style.display = 'none';
+    try { localStorage.setItem(LS_TUT, '1'); } catch (e) { /* 저장소 막힘 */ }
+    if (!this.prefs.tutorialDone) { this.prefs.tutorialDone = true; this.savePrefs(); }
   }
 
   setEasy(on) {                    // 쉬운 모드: .adv 를 숨김
